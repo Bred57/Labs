@@ -15,67 +15,88 @@
 
 Конфигурация спайнов:
 ```sh
+feature ngmvpn
+nv overlay evpn
+feature ospf
+feature bgp
+feature interface-vlan
+feature vn-segment-vlan-based
+feature nv overlay
+
 route-map NH_UNCHANGED permit 10
   set ip next-hop unchanged
 
-interface Ethernet1/1
-  no switchport
-  ip address 10.10.0.1/31
-  ip router isis 10
-  ip ospf network point-to-point
-  ip router ospf 1 area 0.0.0.0
-  no shutdown
+vlan 100
+  vn-segment 10100
 
-interface Ethernet1/2
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback0
+  member vni 1010
+    ingress-replication protocol bgp
+  member vni 10100 associate-vrf
+
+interface Ethernet1/1
+  description to_Life1
   no switchport
-  ip address 10.10.0.5/31
-  ip router isis 10
+  ip address 10.0.0.0/31
   ip ospf network point-to-point
   ip router ospf 1 area 0.0.0.0
   no shutdown
 
 interface Ethernet1/3
+  description to_Life2
   no switchport
-  ip address 10.10.0.9/31
-  ip router isis 10
+  ip address 10.0.0.2/31
   ip ospf network point-to-point
   ip router ospf 1 area 0.0.0.0
   no shutdown
 
-interface loopback1
-  ip address 10.0.1.1/32
-  ip router isis 10
+
+interface Ethernet1/5
+  description to_life3
+  no switchport
+  ip address 10.0.0.4/31
+  ip ospf network point-to-point
+  ip router ospf 1 area 0.0.0.0
+  no shutdown
+
+interface loopback0
+  ip address 10.1.1.1/32
+  ip ospf network point-to-point
   ip router ospf 1 area 0.0.0.0
 
+boot nxos bootflash:/nxos.9.3.13.bin
 router ospf 1
-  router-id 10.0.1.1
-
+  router-id 10.1.1.1
+  
 router bgp 65000
-  router-id 10.0.1.1
+  router-id 10.1.1.1
   address-family l2vpn evpn
     maximum-paths 10
     retain route-target all
-  neighbor 10.1.0.1
+  neighbor 10.0.1.1
     remote-as 65001
-    update-source loopback1
+    update-source loopback0
     ebgp-multihop 5
     address-family l2vpn evpn
       send-community
       send-community extended
       route-map NH_UNCHANGED out
       rewrite-evpn-rt-asn
-  neighbor 10.1.0.2
+  neighbor 10.0.1.2
     remote-as 65002
-    update-source loopback1
+    update-source loopback0
     ebgp-multihop 5
     address-family l2vpn evpn
       send-community
       send-community extended
       route-map NH_UNCHANGED out
       rewrite-evpn-rt-asn
-  neighbor 10.1.0.3
+  neighbor 10.0.1.3
     remote-as 65003
-    update-source loopback1
+    update-source loopback0
     ebgp-multihop 5
     address-family l2vpn evpn
       send-community
@@ -86,6 +107,12 @@ router bgp 65000
 
 Конфигурация лифов:
 ```sh
+feature ospf
+feature bgp
+feature fabric forwarding
+feature vn-segment-vlan-based
+feature nv overlay
+
 vlan 10
   name VLAN_10
   vn-segment 10010
@@ -98,30 +125,30 @@ interface nve1
     ingress-replication protocol bgp
 
 interface Ethernet1/1
+  description to_Spine1
   no switchport
-  ip address 10.10.0.0/31
-  ip router isis 10
+  ip address 10.0.0.1/31
   ip ospf network point-to-point
   ip router ospf 1 area 0.0.0.0
   no shutdown
 
-interface Ethernet1/2
+interface Ethernet1/3
+  description to_Spine2
   no switchport
-  ip address 10.10.0.2/31
-  ip router isis 10
+  ip address 10.0.0.11/31
   ip ospf network point-to-point
   ip router ospf 1 area 0.0.0.0
   no shutdown
 
 interface loopback1
-  ip address 10.1.0.1/32
+  ip address 10.0.1.1/32
   ip router ospf 1 area 0.0.0.0
 
 router ospf 1
-  router-id 10.0.0.1
-
+  router-id 10.0.1.1
+  
 router bgp 65001
-  router-id 10.0.0.1
+  router-id 10.0.1.1
   log-neighbor-changes
   address-family l2vpn evpn
     maximum-paths 10
@@ -133,9 +160,9 @@ router bgp 65001
       send-community
       send-community extended
       rewrite-evpn-rt-asn
-  neighbor 10.0.1.1
+  neighbor 10.1.1.1
     inherit peer SPINES
-  neighbor 10.0.1.2
+  neighbor 10.1.1.2
     inherit peer SPINES
 evpn
   vni 10010 l2
@@ -144,15 +171,22 @@ evpn
     route-target export auto
 ```
 
-Но здесь возникают проблемы, соседство поднимается и видно что spine принимают префиксы, но к сожаленияю, life не принимают от ставнов ничего:
+Проверка:
 
-![alt text](image-1.png)
+соседство поднялось
+![alt text](image-4.png)
+видим что маки летят
+![alt text](image-5.png)
 
-В то время как спан от лифов получает:
-![alt text](image-2.png)
+с стороны лифа 
+![alt text](image-6.png)
+![alt text](image-7.png)
 
-Как следствие, пинга между клиентами нет: 
-![alt text](image-3.png)
+пинг с одного клиента до второго 
+![alt text](image-8.png)
 
+![alt text](image-9.png)
+Видим что на лифе клиент подклчен непосредственно, а второй мак знаем от соседа, так выглядит мак в таблице маков:
+![alt text](image-10.png)
 
-
+Цель зостигнута!
