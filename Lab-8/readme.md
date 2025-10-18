@@ -11,6 +11,42 @@
 
 Приступим к натройке:
 
+Выделенный маршрутизатор:
+
+```sh
+interface Ethernet1
+   no switchport
+   ip address 192.168.20.1/31
+
+interface Ethernet10
+   description A
+   no switchport
+   ip address 192.168.10.1/31
+
+
+ip route 172.16.10.0/24 192.168.10.0
+ip route 172.16.20.0/24 192.168.20.0
+ip route vrf test 0.0.0.0/0 172.16.20.254
+!
+ip routing
+no ip routing vrf test
+!
+router bgp 65001
+   neighbor 192.168.10.0 remote-as 65001
+   neighbor 192.168.10.0 next-hop-self
+   neighbor 192.168.10.0 allowas-in 1
+   neighbor 192.168.10.0 maximum-routes 12000
+   neighbor 192.168.20.0 remote-as 65001
+   neighbor 192.168.20.0 next-hop-self
+   neighbor 192.168.20.0 allowas-in 1
+   neighbor 192.168.20.0 maximum-routes 12000
+   address-family ipv4
+      neighbor 192.168.10.0 activate
+      neighbor 192.168.20.0 activate
+      network 172.16.10.0/24
+      network 172.16.20.0/24
+```
+
 Life 1
 ```sh
 Lif 1
@@ -21,23 +57,18 @@ vrf context A
   address-family ipv4 unicast
     route-target import 65000:100998 evpn
     route-target import 65000:100999 evpn
-    route-target import 65001:100998 evpn
-    route-target import 65001:100999 evpn
     route-target export 65000:100998 evpn
-    route-target export 65000:100999 evpn
-    route-target export 65001:100998 evpn
-    route-target export 65001:100999 evpn
+    route-target import 65000:100999 evpn
+   
 vrf context B
   vni 100998
   ip route 172.16.20.0/24 Null0
   rd 65001:100998
   address-family ipv4 unicast
     route-target import 65000:100998 evpn
-    route-target import 65001:100998 evpn
-    route-target import 65001:100999 evpn
     route-target export 65000:100998 evpn
-    route-target export 65001:100998 evpn
-    route-target export 65001:100999 evpn
+    route-target import 65000:100999 evpn
+    route-target import 65000:100999 evpn
 
 interface Vlan10
   no shutdown
@@ -279,6 +310,8 @@ evpn
 Life 3 настроен аналогично Life 2, только клиент сидит в своем vrf.
 
 Проверяем:
+
+![alt text](image-3.png)
 
 ![alt text](image.png)
 
