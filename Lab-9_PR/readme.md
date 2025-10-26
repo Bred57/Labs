@@ -4,8 +4,6 @@
 
 
 
-
-
 Spine1
 ```sh
 fabric forwarding anycast-gateway-mac 0000.0011.1234
@@ -449,5 +447,147 @@ evpn
     route-target export 65000:10020
 ```
 Конфигурация второй пары лифов аналогичная.
+
+BorderLife
+```sh
+fabric forwarding anycast-gateway-mac 000e.000e.000e
+vlan 1,10,20,999
+vlan 10
+  name VLAN_10
+  vn-segment 10010
+vlan 20
+  name VLAN_20
+  vn-segment 10020
+vlan 999
+  vn-segment 100999
+
+vrf context A
+  vni 100999
+  rd 65002:100999
+  address-family ipv4 unicast
+    route-target import 65000:100999
+    route-target import 65000:100999 evpn
+    route-target export 65000:100999
+    route-target export 65000:100999 evpn
+vrf context management
+
+interface Vlan1
+
+interface Vlan10
+  no shutdown
+  vrf member A
+  ip address 172.16.10.254/24
+  fabric forwarding mode anycast-gateway
+
+interface Vlan20
+  no shutdown
+  vrf member A
+  ip address 172.16.20.254/24
+  fabric forwarding mode anycast-gateway
+
+interface Vlan999
+  no shutdown
+  vrf member A
+  ip forward
+
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback1
+  member vni 10010
+    ingress-replication protocol bgp
+  member vni 10020
+    ingress-replication protocol bgp
+  member vni 100999 associate-vrf
+
+interface Ethernet1/1
+  no switchport
+  ip address 10.0.0.5/31
+  ip ospf network point-to-point
+  ip router ospf 1 area 0.0.0.0
+  no shutdown
+
+interface Ethernet1/3
+  no switchport
+  ip address 10.0.0.7/31
+  ip ospf network point-to-point
+  ip router ospf 1 area 0.0.0.0
+  no shutdown
+
+interface Ethernet1/47
+  no switchport
+  vrf member A
+  ip address 192.168.10.0/31
+  no shutdown
+
+interface loopback1
+  ip address 10.0.1.3/32
+  ip router ospf 1 area 0.0.0.0
+
+router ospf 1
+  router-id 10.0.1.3
+router bgp 65003
+  router-id 10.0.1.3
+  log-neighbor-changes
+  address-family l2vpn evpn
+    maximum-paths 10
+  template peer SPINES
+    remote-as 65000
+    update-source loopback1
+    ebgp-multihop 10
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+  neighbor 10.1.1.1
+    inherit peer SPINES
+  neighbor 10.1.1.2
+    inherit peer SPINES
+  vrf A
+    address-family ipv4 unicast
+      network 172.16.10.0/24
+      network 172.16.20.0/24
+    neighbor 192.168.10.1
+      remote-as 65100
+      address-family ipv4 unicast
+        next-hop-self
+evpn
+  vni 10010 l2
+    rd 65003:10010
+    route-target import 65000:10010
+    route-target export 65000:10010
+  vni 10020 l2
+    rd 65003:10020
+    route-target import 65000:10020
+    route-target export 65000:10020
+```
+
+
+
+Конфигурация маршрутизатора
+```sh
+interface GigabitEthernet0/0
+ ip address 192.168.10.1 255.255.255.254
+ duplex auto
+ speed auto
+ media-type rj45
+ negotiation auto
+end
+
+router bgp 65100
+ bgp log-neighbor-changes
+ neighbor 192.168.10.0 remote-as 65003
+ !
+ address-family ipv4
+  neighbor 192.168.10.0 activate
+  neighbor 192.168.10.0 next-hop-self
+  neighbor 192.168.10.0 allowas-in 1
+  no auto-summary
+  no synchronization
+  network 0.0.0.0
+```
+
+Таким образом через маршрутизатор будет производиться общение с хостами вне фабрики.
+
+Остальось только проверить работоспособность:
 
 
